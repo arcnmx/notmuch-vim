@@ -3,9 +3,7 @@ require 'rubygems'
 require 'tempfile'
 require 'socket'
 require 'mail'
-if VIM::evaluate('g:notmuch_gpg_enable') == 1
-  require 'mail-gpg'
-end
+require 'mail-gpg'
 
 $db_name = nil
 $all_emails = []
@@ -26,8 +24,7 @@ def get_config
   $email_name = get_config_item('user.name')
   $email_address = get_config_item('user.primary_email')
   $secondary_email_addresses = get_config_item('user.primary_email')
-  $email_name = get_config_item('user.name')
-  $email = "%s <%s>" % [$email_name, $email_address]
+  $email = '%s <%s>' % [$email_name, $email_address]
   other_emails = get_config_item('user.other_email')
   $all_emails = other_emails.split("\n")
   # Add the primary to this too as we use it for checking
@@ -47,12 +44,7 @@ def vim_err(s)
   VIM::command("echohl NONE")
 end
 
-def vim_p(s)
-  VIM::command("echo '#{s.inspect}'")
-end
-
 def author_filter(a)
-  # TODO email format, aliases
   a.strip!
   a.gsub!(/[\.@].*/, '')
   a.gsub!(/^ext /, '')
@@ -62,8 +54,8 @@ end
 
 def get_thread_id
   n = $curbuf.line_number - 1
-  return "" if n >= $curbuf.threads.count
-  return "thread:%s" % $curbuf.threads[n]
+  return '' if n >= $curbuf.threads.count
+  return 'thread:%s' % $curbuf.threads[n]
 end
 
 def get_message
@@ -79,44 +71,9 @@ def get_cur_view
   end
 end
 
-def generate_message_id
-  t = Time.now
-  random_tag = sprintf('%x%x_%x%x%x',
-                       t.to_i, t.tv_usec,
-                       $$, Thread.current.object_id.abs, rand(255))
-  return "<#{random_tag}@#{Socket.gethostname}.notmuch>"
-end
-
-def open_compose_helper(lines, cur)
-  help_lines = [
-    'Notmuch-Help: Type in your message here; to help you use these bindings:',
-    'Notmuch-Help:   <Leader>s    - send the message (Notmuch-Help lines will be removed)',
-    'Notmuch-Help:   <Leader>q    - abort the message',
-    'Notmuch-Help: Add a filename after the "Attach:" header to attach a file.',
-    'Notmuch-Help: Multiple Attach headers may be added.',
-  ]
-
-  dir = File.expand_path('~/.notmuch/compose')
-  FileUtils.mkdir_p(dir)
-  Tempfile.open(['nm-', '.mail'], dir) do |f|
-    f.puts(help_lines)
-    f.puts
-    f.puts(lines)
-
-    sig_file = File.expand_path('~/.signature')
-    if File.exists?(sig_file)
-      f.puts("-- ")
-      f.write(File.read(sig_file))
-    end
-
-    f.flush
-
-    cur += help_lines.size + 1
-
-    VIM::command("let s:reply_from='%s'" % $email_address)
-    VIM::command("call s:new_file_buffer('compose', '#{f.path}')")
-    VIM::command("call cursor(#{cur}, 0)")
-  end
+def generate_message_id(hostname)
+  timestamp = '%10.5f' % Time.now.to_f
+  return "<#{timestamp}@#{hostname}>"
 end
 
 def is_our_address(address)
@@ -128,7 +85,7 @@ def is_our_address(address)
   return nil
 end
 
-def rb_show_reply(orig)
+def open_reply(orig)
   reply = orig.reply do |m|
     m.cc = []
     email_addr = $email_address
@@ -160,22 +117,22 @@ def rb_show_reply(orig)
   body_lines = []
   addr = Mail::Address.new(orig[:from].value)
   name = addr.name
-  name = addr.local + "@" if name.nil? && !addr.local.nil?
-  name = "somebody" if name.nil?
+  name = addr.local + '@' if name.nil? && !addr.local.nil?
+  name = 'somebody' if name.nil?
 
-  body_lines << "%s wrote:" % name
+  body_lines << '%s wrote:' % name
   part = orig.find_first_text
   part.convert.each_line do |l|
-    body_lines << "> %s" % l.chomp
+    body_lines << '> %s' % l.chomp
   end
-  body_lines << ""
-  body_lines << ""
-  body_lines << ""
+  body_lines << ''
+  body_lines << ''
+  body_lines << ''
 
   reply.body = body_lines.join("\n")
 
   lines += reply.present.lines.map { |e| e.chomp }
-  lines << ""
+  lines << ''
 
   cur = lines.count - 1
 
@@ -202,9 +159,9 @@ def folders_render()
       $searches << search
       count = count_threads ? q.count_threads : q.count_messages
       if name == ''
-        b << ""
+        b << ''
       elsif display_unread
-        u = $curbuf.query("(%s) and tag:unread" % [search])
+        u = $curbuf.query('(%s) and tag:unread' % [search])
         $exclude_tags.each { |t|
           u.add_tag_exclude(t)
         }
@@ -218,7 +175,7 @@ def folders_render()
 end
 
 def search_render(search)
-  date_fmt = VIM::evaluate('g:notmuch_date_format')
+  date_fmt = VIM::evaluate('g:notmuch_search_date_format')
   q = $curbuf.query(search)
   q.sort = Notmuch::SORT_NEWEST_FIRST
   $exclude_tags.each { |t|
@@ -229,17 +186,26 @@ def search_render(search)
 
   $render = $curbuf.render_staged(t) do |b, items|
     items.each do |e|
-      authors = e.authors.to_utf8.split(/[,|]/).map { |a| author_filter(a) }.join(",")
+      authors = e.authors.to_utf8.split(/[,|]/).map { |a| author_filter(a) }.join(',')
       date = Time.at(e.newest_date).strftime(date_fmt)
       subject = e.messages.first['subject']
-      subject = Mail::Field.new("Subject: " + subject).to_s
-      b << "%-12s %3s %-20.20s | %s (%s)" % [date, e.matched_messages, authors, subject, e.tags]
+      subject = Mail::Field.new('Subject: ' + subject).to_s
+      b << '%-12s %3s %-20.20s | %s (%s)' % [date, e.matched_messages, authors, subject, e.tags]
       $curbuf.threads << e.thread_id
     end
   end
 end
 
-def do_tag(filter, tags)
+def render()
+  filetype = VIM::evaluate('&filetype')
+  if filetype == 'notmuch-folders'
+    folders_render()
+  elsif filetype == 'notmuch-search'
+    search_render($cur_search)
+  end
+end
+
+def tag(filter, tags)
   if not filter.empty?
     $curbuf.do_write do |db|
       q = db.query(filter)
@@ -263,21 +229,26 @@ def do_tag(filter, tags)
   end
 end
 
-def rb_compose_send(text, fname)
+def compose_send(text, fname)
   # Generate proper mail to send
   nm = Mail.new(text.join("\n"))
-  nm.message_id = generate_message_id
   nm.charset = 'utf-8'
   attachment = nil
+  hostname = nil
   files = []
+  sign = VIM::evaluate('g:notmuch_gpg_sign') == 1
+  encrypt = !(nm.header['Subject'].to_s =~ /(?:encrypt(?:ed)?|pgp|gpg)$/i).nil?
   nm.header.fields.each do |f|
     if f.name == 'Attach' and f.value.length > 0 and f.value !~ /^\s+/
       # We can't just do the attachment here because it screws up the
       # headers and makes our loop incorrect.
       files.push(f.value)
       attachment = f
+    elsif f.name == 'From'
+      hostname = f.value.split('@')[1].split('>')[0]
     end
   end
+  nm.message_id = generate_message_id(hostname)
 
   files.each do |f|
     vim_puts("Attaching file #{f}")
@@ -292,19 +263,18 @@ def rb_compose_send(text, fname)
   end
 
   del_method = VIM::evaluate('g:notmuch_sendmail_method').to_sym
-  del_param_vim = VIM::evaluate('g:notmuch_sendmail_param')
-  del_param = {}
-  del_param_vim.each do |k, v|
-    del_param[k.to_sym] = v
-  end
+  del_param = {
+    :location => VIM::evaluate('g:notmuch_sendmail_location'),
+    :arguments => VIM::evaluate('g:notmuch_sendmail_arguments')
+  }
 
   vim_puts("Sending email via #{del_method}...")
   nm.delivery_method del_method, del_param
-  nm.deliver!
-  vim_puts("Delivery complete.")
+  nm.gpg encrypt: encrypt, sign: sign
+  nm.deliver
+  vim_puts('Delivery complete.')
 
-
-  save_locally = VIM::evaluate('g:notmuch_save_sent_locally')
+  save_locally = VIM::evaluate('g:notmuch_save_sent_locally') == 1
   if save_locally
     File.write(fname, nm.to_s)
     local_mailbox = VIM::evaluate('g:notmuch_save_sent_mailbox')
@@ -313,7 +283,7 @@ def rb_compose_send(text, fname)
   end
 end
 
-def rb_show_prev_msg()
+def prev_message()
   r, c = $curwin.cursor
   n = $curbuf.line_number
   messages = $curbuf.messages
@@ -327,16 +297,14 @@ def rb_show_prev_msg()
       VIM::command("normal #{m.start}zt")
     else
       r = m.body_start + 1
-      scrolloff = VIM::evaluate("&scrolloff")
+      scrolloff = VIM::evaluate('&scrolloff')
       VIM::command("normal #{m.start + scrolloff}zt")
       $curwin.cursor = r + scrolloff, c
     end
   end
 end
 
-def rb_show_next_msg(matching_tag)
-  matching_tag = VIM::evaluate('a:matching_tag')
-
+def next_message(matching_tag)
   r, c = $curwin.cursor
   n = $curbuf.line_number
   messages = $curbuf.messages
@@ -367,64 +335,74 @@ def rb_show_next_msg(matching_tag)
       VIM::command("normal #{found_msg.start}zt")
     else
       r = found_msg.body_start + 1
-      scrolloff = VIM::evaluate("&scrolloff")
+      scrolloff = VIM::evaluate('&scrolloff')
       VIM::command("normal #{found_msg.start + scrolloff}zt")
       $curwin.cursor = r + scrolloff, c
     end
   end
 end
 
-def rb_open_compose(to_email)
-  lines = []
-
-  lines << "From: #{$email}"
-  lines << "To: #{to_email}"
-  cur = lines.count
-
-  lines << "Cc: "
-  lines << "Bcc: "
-  lines << "Subject: "
-  lines << "Attach: "
-  lines << ""
-  lines << ""
-
-  open_compose_helper(lines, cur)
+def open_compose_helper(lines, cursor)
+  dir = File.expand_path('~/.notmuch/compose')
+  FileUtils.mkdir_p(dir)
+  Tempfile.open(['nm-', '.mail'], dir) do |f|
+    f.puts(lines)
+    sig_file = File.expand_path('~/.signature')
+    if File.exists?(sig_file)
+      f.puts('--')
+      f.write(File.read(sig_file))
+    end
+    f.flush
+    VIM::command("call s:NewFileBuffer('compose', '#{f.path}')")
+    VIM::command("call cursor(#{cursor}, 0)")
+  end
 end
 
-def rb_show_view_magic(line, lineno, fold)
+def open_compose(to_email)
+  lines = []
+  lines << "From: #{$email}"
+  lines << "To: #{to_email}"
+  cursor = lines.count
+  lines << 'Cc: '
+  lines << 'Bcc: '
+  lines << 'Subject: '
+  lines << ''
+  open_compose_helper(lines, cursor)
+end
+
+def view_magic(line, lineno, fold)
   # Also use enter to open folds.  After using 'enter' to get
   # all the way to here it feels very natural to want to use it
   # to open folds too.
   if fold > 0
     VIM::command('foldopen')
-    scrolloff = VIM::evaluate("&scrolloff")
+    scrolloff = VIM::evaluate('&scrolloff')
     vim_puts("Moving to #{lineno} + #{scrolloff} zt")
     # We use relative movement here because of the folds
     # within the messages (header folds).  If you use absolute movement the
     # cursor will get stuck in the fold.
     VIM::command("normal #{scrolloff}j")
-    VIM::command("normal zt")
+    VIM::command('normal zt')
   else
     # Easiest to check for 'Part' types first..
     match = line.match(/^Part (\d*):/)
     if match and match.length == 2
-      rb_show_view_attachment(line)
+      view_attachment(line)
     else
-      VIM::command('call s:show_open_uri()')
+      VIM::command('call s:OpenUri()')
     end
   end
 end
 
-def rb_show_view_attachment(line)
+def view_attachment(line)
   m = get_message
   line = VIM::evaluate('line')
 
   match = line.match(/^Part (\d*):/)
   if match and match.length == 2
-    # Set up the tmpdir
-    tmpdir = VIM::evaluate('g:notmuch_attachment_tmpdir')
-    tmpdir = File.expand_path(tmpdir)
-    Dir.mkdir(tmpdir) unless Dir.exists?(tmpdir)
+    dir = VIM::evaluate('g:notmuch_attachment_dir')
+    dir = File.expand_path(dir)
+    Dir.mkdir(dir) unless Dir.exists?(dir)
 
     p = m.mail.parts[match[1].to_i - 1]
     if p == nil
@@ -444,20 +422,20 @@ def rb_show_view_attachment(line)
     # Sanitize just in case..
     filename.gsub!(/[^0-9A-Za-z.\-]/, '_')
 
-    fullpath = File.expand_path("#{tmpdir}/#{filename}")
+    fullpath = File.expand_path("#{dir}/#{filename}")
     vim_puts "Viewing attachment #{fullpath}"
     File.open(fullpath, 'w') do |f|
       f.write p.body.decoded
-      cmd = VIM::evaluate('g:notmuch_view_attachment')
-      system(cmd, fullpath)
     end
+    cmd = VIM::evaluate('g:notmuch_view_attachment')
+    system(cmd, fullpath)
   else
-    vim_puts "No attachment on this line."
+    vim_puts 'No attachment on this line.'
   end
 
 end
 
-def rb_show_open_uri(line, col)
+def open_uri(line, col)
   uris = URI.extract(line)
   wanted_uri = nil
   if uris.length == 1
@@ -484,19 +462,21 @@ def rb_show_open_uri(line, col)
         vim_puts("Message not found in NotMuch database: #{uri.to_s}")
       else
         vim_puts("Opening message #{msg.message_id} in thread #{msg.thread_id}.")
-        VIM::command("call s:show('thread:#{msg.thread_id}', '#{msg.message_id}')")
+        VIM::command("call s:Show('thread:#{msg.thread_id}', '#{msg.message_id}')")
       end
     else
       vim_puts("Opening #{uri.to_s}.")
       cmd = VIM::evaluate('g:notmuch_open_uri')
-      system(cmd, uri.to_s)
+      # TODO(mash): Fix "Invalid channel 2" issue after calling this.
+      # system(cmd, uri.to_s)
+      VIM::command("!#{cmd} '#{uri.to_s}'")
     end
   else
     vim_puts('URI not found.')
   end
 end
 
-def rb_show_extract_msg(line)
+def extract_msg(line)
   m = get_message
 
   # If the user is on a line that has an 'Part'
@@ -519,7 +499,7 @@ def rb_show_extract_msg(line)
   end
 end
 
-def rb_show_save_patches(dir)
+def save_patches(dir)
   if File.exists?(dir)
     q = $curbuf.query($curbuf.cur_thread)
     t = q.search_threads.first
@@ -561,11 +541,9 @@ def gpg_passfunc(obj, uid_hint, passphrase_info, prev_was_bad, fd)
   io.flush
 end
 
-def rb_show(thread_id, msg_id)
+def show(thread_id, msg_id)
   show_full_headers = VIM::evaluate('g:notmuch_show_folded_full_headers') == 1
-  # show_threads_folded = VIM::evaluate('g:notmuch_show_folded_threads') == 1
   showheaders = VIM::evaluate('g:notmuch_show_headers')
-  gpg = VIM::evaluate('g:notmuch_gpg_enable') == 1
   gpgpin = VIM::evaluate('g:notmuch_gpg_pinentry') == 1
 
   $curbuf.cur_thread = thread_id
@@ -581,62 +559,60 @@ def rb_show(thread_id, msg_id)
       enc = false
       mime = false
       encfail = false
-      if gpg
-        mime = Mail::Gpg::encrypted_mime?(m)
-        enc = mime || m.encrypted?
-        if enc
-          mail = m
-          begin
-            if gpgpin
-              m = m.decrypt(:verify => true)
-              VIM::command("silent! reset")
-              VIM::command("redraw!")
-            else
-              m = m.decrypt(:verify => true, :passphrase_callback => method(:gpg_passfunc), :pinentry_mode => GPGME::PINENTRY_MODE_LOOPBACK)
-            end
-          rescue Exception
-            m = mail
-            encfail = true
+      mime = Mail::Gpg::encrypted_mime?(m)
+      enc = mime || m.encrypted?
+      if enc
+        mail = m
+        begin
+          if gpgpin
+            m = m.decrypt(:verify => true)
+            VIM::command('silent! reset')
+            VIM::command('redraw!')
+          else
+            m = m.decrypt(:verify => true,
+                          :passphrase_callback => method(:gpg_passfunc),
+                          :pinentry_mode => GPGME::PINENTRY_MODE_LOOPBACK)
           end
+        rescue Exception
+          m = mail
+          encfail = true
         end
       end
       part = m.find_first_text
       nm_m = Message.new(msg, m)
       messages << nm_m
-      date_fmt = VIM::evaluate('g:notmuch_datetime_format')
+      date_fmt = VIM::evaluate('g:notmuch_show_date_format')
       date = Time.at(msg.date).strftime(date_fmt)
       nm_m.start = b.count
-      b << "From: %s %s (%s)" % [msg['from'], date, msg.tags]
+      b << 'From: %s %s (%s)' % [msg['from'], date, msg.tags]
       showheaders.each do |h|
-        b << "%s: %s" % [h, m.header[h]]
+        b << '%s: %s' % [h, m.header[h]]
       end
-      if gpg
-        if encfail
-          b << "Encryption: Error"
-          b << ""
-          nm_m.full_header_start = nm_m.full_header_end = b.count
-          nm_m.body_start = b.count
-          nm_m.end = b.count
-          next
-        end
-        if enc
-          b << "Encryption: %s" % [mime ? "PGP/Mime" : "Inline"]
-        end
-        if (enc && m.signatures.length != 0) || m.signed?
-          begin
-            verified = nil
-            if enc
-              verified = m
-            else
-              verified = m.verify
-            end
-            b << "Signature: %s" % [verified.signature_valid? ? "Valid" : "Invalid"]
-            if verified.signature_valid?
-              b << "Signed by: %s" % [verified.signatures.map{|sig| sig.from}.join(", ")]
-            end
-          rescue Exception
-            b << "Signature: Error"
+      if encfail
+        b << 'Encryption: Error'
+        b << ''
+        nm_m.full_header_start = nm_m.full_header_end = b.count
+        nm_m.body_start = b.count
+        nm_m.end = b.count
+        next
+      end
+      if enc
+        b << 'Encryption: %s' % [mime ? 'PGP/Mime' : 'Inline']
+      end
+      if (enc && m.signatures.length != 0) || m.signed?
+        begin
+          verified = nil
+          if enc
+            verified = m
+          else
+            verified = m.verify
           end
+          b << 'Signature: %s' % [verified.signature_valid? ? 'Valid' : 'Invalid']
+          if verified.signature_valid?
+            b << 'Signed by: %s' % [verified.signatures.map{|sig| sig.from}.join(', ')]
+          end
+        rescue Exception
+          b << 'Signature: Error'
         end
       end
       nm_m.full_header_start = b.count
@@ -653,19 +629,19 @@ def rb_show(thread_id, msg_id)
       cnt = 0
       m.parts.each do |p|
         cnt += 1
-        b << "Part %d: %s (%s)" % [cnt, p.mime_type, p.filename]
+        b << 'Part %d: %s (%s)' % [cnt, p.mime_type, p.filename]
       end
       # Add a special case for text/html messages.  Here we show the
       # only 'part' so that we can view it in a web browser if we want.
       if m.parts.length == 0 and part.mime_type == 'text/html'
-        b << "Part 1: text/html"
+        b << 'Part 1: text/html'
       end
       nm_m.body_start = b.count
-      b << "--- %s ---" % part.mime_type
+      b << '--- %s ---' % part.mime_type
       part.convert.each_line do |l|
         b << l.chomp
       end
-      b << ""
+      b << ''
       nm_m.end = b.count
       focus_msg = nm_m if !focus_msg and nm_m.tags.include?('unread')
       if !msg_id.empty? and nm_m.message_id == msg_id
@@ -684,18 +660,18 @@ def rb_show(thread_id, msg_id)
 
     if msg.tags.include?('unread')
       VIM::command("normal #{msg.start}G")
-      VIM::command("foldopen")
+      VIM::command('foldopen')
     end
   end
   focus_msg = messages[-1] if !focus_msg
   VIM::command("normal #{focus_msg.start}G")
-  VIM::command("foldopen")
-  scrolloff = VIM::evaluate("&scrolloff")
+  VIM::command('foldopen')
+  scrolloff = VIM::evaluate('&scrolloff')
   VIM::command("normal #{scrolloff}j")
-  VIM::command("normal zt")
+  VIM::command('normal zt')
 end
 
-def rb_search_show_thread(mode)
+def show_thread(mode)
   id = get_thread_id
   if not id.empty?
     case mode
@@ -703,7 +679,7 @@ def rb_search_show_thread(mode)
     when 1; $cur_filter = nil
     when 2; $cur_filter = $cur_search
     end
-    VIM::command("call s:show('#{id}', '')")
+    VIM::command("call s:Show('#{id}', '')")
   end
 end
 
@@ -766,11 +742,11 @@ class Message
   end
 
   def to_s
-    "id:%s" % @message_id
+    'id:%s' % @message_id
   end
 
   def inspect
-    "id:%s, file:%s" % [@message_id, @filename]
+    'id:%s, file:%s' % [@message_id, @filename]
   end
 end
 
@@ -830,13 +806,13 @@ end
 
 class Notmuch::Tags
   def to_s
-    to_a.join(" ")
+    to_a.join(' ')
   end
 end
 
 class Notmuch::Message
   def to_s
-    "id:%s" % message_id
+    'id:%s' % message_id
   end
 end
 
@@ -856,11 +832,11 @@ module Mail
     end
 
     def convert
-      if mime_type != "text/html"
+      if mime_type != 'text/html'
         text = decoded
       else
         IO.popen(VIM::evaluate('exists("g:notmuch_html_converter") ? ' +
-                               'g:notmuch_html_converter : "elinks --dump"'), "w+") do |pipe|
+                               'g:notmuch_html_converter : "elinks --dump"'), 'w+') do |pipe|
           pipe.write(decode_body)
           pipe.close_write
           text = pipe.read
@@ -874,7 +850,6 @@ module Mail
       header.fields.each do |f|
         buffer << "%s: %s\r\n" % [f.name, f.to_s]
       end
-      buffer << "Attach: \r\n"
       buffer << "\r\n"
       buffer << body.to_s
       buffer
@@ -884,11 +859,8 @@ end
 
 class String
   def to_utf8
-    RUBY_VERSION >= "1.9" ? force_encoding('utf-8') : self
+    RUBY_VERSION >= '1.9' ? force_encoding('utf-8') : self
   end
 end
 
 get_config
-
-# vim: autoindent tabstop=2 shiftwidth=2 expandtab softtabstop=2 filetype=ruby
-
