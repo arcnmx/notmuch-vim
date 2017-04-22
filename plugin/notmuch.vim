@@ -164,7 +164,7 @@ function! g:NotmuchPermanentDelete()
   " Deleting messages permanently should be painful.
   let l:choice = confirm('Do you really want to delete this message permanently?', "&yes\n&no", 1)
   if l:choice == 1
-    ruby system 'rm -f ' + get_message.filename
+    ruby system 'rm -f ' + Shellwords.escape(get_message.filename)
     call g:NotmuchDeleteBuffer()
     !notmuch new
     call g:NotmuchRefresh()
