@@ -65,6 +65,7 @@ function! s:InitVariable(variable, value)
   endif
 endfunction
 
+call s:InitVariable('g:notmuch_config_file', '~/.notmuch-config')
 call s:InitVariable('g:notmuch_sendmail_method', 'sendmail')
 call s:InitVariable('g:notmuch_sendmail_location', '/usr/bin/msmtp')
 call s:InitVariable('g:notmuch_sendmail_arguments', '')

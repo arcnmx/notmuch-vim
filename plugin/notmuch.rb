@@ -14,7 +14,8 @@ $searches = []
 
 def get_config_item(item)
   result = ''
-  IO.popen(['notmuch', 'config', 'get', item]) { |out|
+  cfg = '--config=' + File.expand_path(VIM::evaluate('g:notmuch_config_file'))
+  IO.popen(['notmuch', cfg, 'config', 'get', item]) { |out|
     result = out.read
   }
   return result.rstrip
