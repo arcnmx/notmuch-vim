@@ -404,7 +404,7 @@ def view_attachment(line)
     dir = File.expand_path(dir)
     Dir.mkdir(dir) unless Dir.exists?(dir)
 
-    p = m.mail.parts[match[1].to_i - 1]
+    p = m.mail.all_parts[match[1].to_i - 1]
     if p == nil
       # Not a multipart message, use the message itself.
       p = m.mail
@@ -483,7 +483,7 @@ def extract_msg(line)
   # line, we just extract the one attachment.
   match = line.match(/^Part (\d*):/)
   if match and match.length == 2
-    p = m.mail.parts[match[1].to_i - 1]
+    p = m.mail.all_parts[match[1].to_i - 1]
     File.open(p.filename, 'w') do |f|
       f.write p.body.decoded
       vim_puts "Extracted #{p.filename}"
@@ -627,7 +627,7 @@ def show(thread_id, msg_id)
         nm_m.full_header_end = b.count
       end
       cnt = 0
-      m.parts.each do |p|
+      m.all_parts.each do |p|
         cnt += 1
         b << 'Part %d: %s (%s)' % [cnt, p.mime_type, p.filename]
       end
