@@ -4,6 +4,7 @@ require 'tempfile'
 require 'socket'
 require 'mail'
 require 'mail-gpg'
+require 'rack/mime'
 
 $db_name = nil
 $all_emails = []
@@ -394,45 +395,51 @@ def view_magic(line, lineno, fold)
   end
 end
 
-def view_attachment(line)
-  m = get_message
-  line = VIM::evaluate('line')
+def format_filename(filename, suffix, mime_type)
+  if not filename
+    extension = Rack::Mime::MIME_TYPES.invert[mime_type]
+    filename = "part-#{suffix}#{extension}"
+  end
+  filename.gsub!(/[^0-9A-Za-z.\-]/, '-')
+  filename.gsub!(/--+/, '-')
+  return filename
+end
 
-  match = line.match(/^Part (\d*):/)
-  if match and match.length == 2
+def parse_part(line)
+  m = get_message
+  # Part index: type/subtype (filename)
+  match = line.match(/^Part (\d*): ([^\/]+)\/([^ ]+) \(([^)]+)\)/)
+  if match and match.length == 5
+    index = match[1].to_i - 1
+    filename = match[4]
+    part = m.mail.all_parts[index]
+    return part, filename
+  end
+end
+
+def extract_part(line)
+  part, filename = parse_part(line)
+  if part
     dir = VIM::evaluate('g:notmuch_attachment_dir')
     dir = File.expand_path(dir)
     Dir.mkdir(dir) unless Dir.exists?(dir)
-
-    p = m.mail.all_parts[match[1].to_i - 1]
-    if p == nil
-      # Not a multipart message, use the message itself.
-      p = m.mail
-    end
-    if p.filename and p.filename.length > 0
-      filename = p.filename
-    else
-      suffix = ''
-      if p.mime_type == 'text/html'
-        suffix = '.html'
-      end
-      filename = "part-#{match[1]}#{suffix}"
-    end
-
-    # Sanitize just in case..
-    filename.gsub!(/[^0-9A-Za-z.\-]/, '_')
-
     fullpath = File.expand_path("#{dir}/#{filename}")
-    vim_puts "Viewing attachment #{fullpath}"
     File.open(fullpath, 'w') do |f|
-      f.write p.body.decoded
+      f.write part.body.decoded
     end
+    return fullpath
+  end
+end
+
+def view_attachment(line)
+  fullpath = extract_part(line)
+  if fullpath
+    vim_puts "Viewing attachment #{fullpath}"
     cmd = VIM::evaluate('g:notmuch_view_attachment')
     system(cmd, fullpath)
   else
     vim_puts 'No attachment on this line.'
   end
-
 end
 
 def open_uri(line, col)
@@ -473,29 +480,6 @@ def open_uri(line, col)
     end
   else
     vim_puts('URI not found.')
-  end
-end
-
-def extract_msg(line)
-  m = get_message
-
-  # If the user is on a line that has an 'Part'
-  # line, we just extract the one attachment.
-  match = line.match(/^Part (\d*):/)
-  if match and match.length == 2
-    p = m.mail.all_parts[match[1].to_i - 1]
-    File.open(p.filename, 'w') do |f|
-      f.write p.body.decoded
-      vim_puts "Extracted #{p.filename}"
-    end
-  else
-    # Extract them all..
-    m.mail.attachments.each do |a|
-      File.open(a.filename, 'w') do |f|
-        f.write a.body.decoded
-        vim_puts "Extracted #{a.filename}"
-      end
-    end
   end
 end
 
@@ -578,7 +562,7 @@ def show(thread_id, msg_id)
           encfail = true
         end
       end
-      part = m.find_first_text
+      text_part = m.find_first_text
       nm_m = Message.new(msg, m)
       messages << nm_m
       date_fmt = VIM::evaluate('g:notmuch_show_date_format')
@@ -626,19 +610,12 @@ def show(thread_id, msg_id)
         end
         nm_m.full_header_end = b.count
       end
-      cnt = 0
-      m.all_parts.each do |p|
-        cnt += 1
-        b << 'Part %d: %s (%s)' % [cnt, p.mime_type, p.filename]
-      end
-      # Add a special case for text/html messages.  Here we show the
-      # only 'part' so that we can view it in a web browser if we want.
-      if m.parts.length == 0 and part.mime_type == 'text/html'
-        b << 'Part 1: text/html'
+      m.all_parts.each_with_index do |part, index|
+        b << 'Part %d: %s (%s)' % [index + 1, part.mime_type, format_filename(part.filename, index, part.mime_type)]
       end
       nm_m.body_start = b.count
-      b << '--- %s ---' % part.mime_type
-      part.convert.each_line do |l|
+      b << '--- %s ---' % text_part.mime_type
+      text_part.convert.each_line do |l|
         b << l.chomp
       end
       b << ''
