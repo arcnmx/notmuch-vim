@@ -167,7 +167,7 @@ function! g:NotmuchPermanentDelete()
   if l:choice == 1
     ruby system 'rm -f ' + Shellwords.escape(get_message.filename)
     call g:NotmuchDeleteBuffer()
-    !notmuch new
+    execute '!notmuch --config=' . expand(g:notmuch_config_file) . ' new'
     call g:NotmuchRefresh()
   endif
 endfunction
@@ -213,7 +213,8 @@ function! g:NotmuchDumpMbox()
 ruby << EOF
   file = VIM::evaluate('l:file')
   m = get_message
-  system "notmuch show --format=mbox id:#{m.message_id} > #{file}"
+  cfg = '--config=' + File.expand_path(VIM::evaluate('g:notmuch_config_file'))
+  system "notmuch #{cfg} show --format=mbox id:#{m.message_id} > #{file}"
 EOF
 endfunction
 
