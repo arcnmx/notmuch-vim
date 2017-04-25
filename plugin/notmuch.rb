@@ -612,7 +612,7 @@ def show(thread_id, msg_id)
         nm_m.full_header_end = b.count
       end
       m.all_parts.each_with_index do |part, index|
-        b << 'Part %d: %s (%s)' % [index + 1, part.mime_type, format_filename(part.filename, index, part.mime_type)]
+        b << 'Part %d: %s (%s)' % [index + 1, part.mime_type, format_filename(part.filename, index + 1, part.mime_type)]
       end
       nm_m.body_start = b.count
       b << '--- %s ---' % text_part.mime_type
