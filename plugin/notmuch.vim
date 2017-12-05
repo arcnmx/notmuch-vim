@@ -36,7 +36,7 @@ let g:notmuch_show_maps = {
 	\ 'I':		'show_tag("-unread")',
 	\ 't':		'show_tag("")',
 	\ 'o':		'show_open_msg()',
-	\ 'e':		'show_extract_msg()',
+	\ 'x':		'show_extract_msg()',
 	\ '<Enter>':	'show_view_magic()',
 	\ 's':		'show_save_msg()',
 	\ 'p':		'show_save_patches()',
