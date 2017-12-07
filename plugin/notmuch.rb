@@ -90,7 +90,7 @@ end
 def open_reply(orig)
   reply = orig.reply do |m|
     m.cc = []
-    email_addr = $email_address
+    email = $email
     # Use hashes for email addresses so we can eliminate duplicates.
     cc = Hash.new
     if orig[:cc]
@@ -103,14 +103,21 @@ def open_reply(orig)
         cc[o.address] = o
       end
     end
+    if orig[:from]
+      orig[:from].each do |o|
+        if is_our_address(o.address)
+          email = o
+        end
+      end
+    end
     cc.each do |e_addr, addr|
       if is_our_address(e_addr)
-        email_addr = is_our_address(e_addr)
+        email = addr
       else
         m.cc << addr
       end
     end
-    m.from = "#{$email_name} <#{email_addr}>"
+    m.from = "#{email}"
     m.charset = 'utf-8'
   end
 
