@@ -118,6 +118,9 @@ def open_reply(orig)
       end
     end
     m.from = "#{email}"
+    if m.to != m.from
+      m.bcc = "#{email}"
+    end
     m.charset = 'utf-8'
   end
 
@@ -373,7 +376,7 @@ def open_compose(to_email)
   lines << "To: #{to_email}"
   cursor = lines.count
   lines << 'Cc: '
-  lines << 'Bcc: '
+  lines << "Bcc: #{$email}"
   lines << 'Subject: '
   lines << ''
   open_compose_helper(lines, cursor)
