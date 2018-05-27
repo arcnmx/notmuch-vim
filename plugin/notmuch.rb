@@ -775,8 +775,10 @@ class VIM::Buffer
     init_dbhelper()
   end
 
-  def <<(a)
-    append(count(), a)
+  def <<(message)
+    message.split("\n").each {
+      |s| append(count(), s)
+    }
   end
 
   def render_staged(enumerable, &block)
