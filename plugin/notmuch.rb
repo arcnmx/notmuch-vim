@@ -152,7 +152,7 @@ def open_reply(orig)
 end
 
 def folders_render()
-  $curbuf.render do |b|
+  $curbuf.render do |buffer|
     folders = VIM::evaluate('g:notmuch_folders')
     count_threads = VIM::evaluate('g:notmuch_folders_count_threads') == 1
     display_unread = VIM::evaluate('g:notmuch_folders_display_unread_count') == 1
@@ -171,16 +171,16 @@ def folders_render()
       $searches << search
       count = count_threads ? q.count_threads : q.count_messages
       if name == ''
-        b << ''
+        buffer << ''
       elsif display_unread
         u = $curbuf.query('(%s) and tag:unread' % [search])
         $exclude_tags.each { |t|
           u.add_tag_exclude(t)
         }
         ucount = count_threads ? u.count_threads : u.count_messages
-        b << "%9d (%3d) %-#{longest_name + 1}s (%s)" % [count, ucount, name, search]
+        buffer << "%9d (%3d) %-#{longest_name + 1}s (%s)" % [count, ucount, name, search]
       else
-        b << "%9d %-#{longest_name + 1}s (%s)" % [count, name, search]
+        buffer << "%9d %-#{longest_name + 1}s (%s)" % [count, name, search]
       end
     end
   end
@@ -196,13 +196,13 @@ def search_render(search)
   $curbuf.threads.clear
   t = q.search_threads
 
-  $render = $curbuf.render_staged(t) do |b, items|
+  $render = $curbuf.render_staged(t) do |buffer, items|
     items.each do |e|
       authors = e.authors.to_utf8.split(/[,|]/).map { |a| author_filter(a) }.join(',')
       date = Time.at(e.newest_date).strftime(date_fmt)
       subject = e.messages.first['subject']
       subject = Mail::Field.new('subject', subject).to_s
-      b << '%-12s %3s %-20.20s | %s (%s)' % [date, e.matched_messages, authors, subject, e.tags]
+      buffer << '%-12s %3s %-20.20s | %s (%s)' % [date, e.matched_messages, authors, subject, e.tags]
       $curbuf.threads << e.thread_id
     end
   end
@@ -545,7 +545,7 @@ def show(thread_id, msg_id)
   messages = $curbuf.messages
   messages.clear
   focus_msg = nil
-  $curbuf.render do |b|
+  $curbuf.render do |buffer|
     q = $curbuf.query(get_cur_view)
     q.sort = Notmuch::SORT_OLDEST_FIRST
     msgs = q.search_messages
@@ -578,21 +578,21 @@ def show(thread_id, msg_id)
       messages << nm_m
       date_fmt = VIM::evaluate('g:notmuch_show_date_format')
       date = Time.at(msg.date).strftime(date_fmt)
-      nm_m.start = b.count
-      b << 'From: %s %s (%s)' % [msg['from'], date, msg.tags]
+      nm_m.start = buffer.count
+      buffer << 'From: %s %s (%s)' % [msg['from'], date, msg.tags]
       showheaders.each do |h|
-        b << '%s: %s' % [h, m.header[h]]
+        buffer << '%s: %s' % [h, m.header[h]]
       end
       if encfail
-        b << 'Encryption: Error'
-        b << ''
-        nm_m.full_header_start = nm_m.full_header_end = b.count
-        nm_m.body_start = b.count
-        nm_m.end = b.count
+        buffer << 'Encryption: Error'
+        buffer << ''
+        nm_m.full_header_start = nm_m.full_header_end = buffer.count
+        nm_m.body_start = buffer.count
+        nm_m.end = buffer.count
         next
       end
       if enc
-        b << 'Encryption: %s' % [mime ? 'PGP/Mime' : 'Inline']
+        buffer << 'Encryption: %s' % [mime ? 'PGP/Mime' : 'Inline']
       end
       if (enc && m.signatures.length != 0) || m.signed?
         begin
@@ -602,41 +602,41 @@ def show(thread_id, msg_id)
           else
             verified = m.verify
           end
-          b << 'Signature: %s' % [verified.signature_valid? ? 'Valid' : 'Invalid']
+          buffer << 'Signature: %s' % [verified.signature_valid? ? 'Valid' : 'Invalid']
           if verified.signature_valid?
-            b << 'Signed by: %s' % [verified.signatures.map{|sig| sig.from}.join(', ')]
+            buffer << 'Signed by: %s' % [verified.signatures.map{|sig| sig.from}.join(', ')]
           end
         rescue Exception
-          b << 'Signature: Error'
+          buffer << 'Signature: Error'
         end
       end
-      nm_m.full_header_start = b.count
+      nm_m.full_header_start = buffer.count
       if show_full_headers
         # Now show the rest in a folded area.
         m.header.fields.each do |k|
           # Only show the ones we haven't already printed out.
           if not showheaders.include?(k.name)
-            b << '%s: %s' % [k.name, k.to_s]
+            buffer << '%s: %s' % [k.name, k.to_s]
           end
         end
-        nm_m.full_header_end = b.count
+        nm_m.full_header_end = buffer.count
       end
       m.all_parts.each_with_index do |part, index|
-        b << 'Part %d: %s (%s)' % [index + 1, part.mime_type, format_filename(part.filename, index + 1, part.mime_type)]
+        buffer << 'Part %d: %s (%s)' % [index + 1, part.mime_type, format_filename(part.filename, index + 1, part.mime_type)]
       end
-      nm_m.body_start = b.count
-      b << '--- %s ---' % text_part.mime_type
+      nm_m.body_start = buffer.count
+      buffer << '--- %s ---' % text_part.mime_type
       text_part.convert.each_line do |l|
-        b << l.chomp
+        buffer << l.chomp
       end
-      b << ''
-      nm_m.end = b.count
+      buffer << ''
+      nm_m.end = buffer.count
       focus_msg = nm_m if !focus_msg and nm_m.tags.include?('unread')
       if !msg_id.empty? and nm_m.message_id == msg_id
         focus_msg = nm_m
       end
     end
-    b.delete(b.count)
+    buffer.delete(buffer.count)
   end
   messages = $curbuf.messages
   messages.each_with_index do |msg, i|
@@ -740,25 +740,25 @@ end
 
 class StagedRender
   def initialize(buffer, enumerable, block)
-    @b = buffer
+    @buffer = buffer
     @enumerable = enumerable
     @block = block
     @last_render = 0
 
-    @b.render { do_next }
+    @buffer.render { do_next }
 
-    @last_render = @b.count
+    @last_render = @buffer.count
   end
 
   def is_ready?
-    @last_render - @b.line_number <= $curwin.height
+    @last_render - @buffer.line_number <= $curwin.height
   end
 
   def do_next
     items = @enumerable.take($curwin.height * 2)
     return if items.empty?
-    @block.call @b, items
-    @last_render = @b.count
+    @block.call @buffer, items
+    @last_render = @buffer.count
   end
 end
 
