@@ -818,12 +818,16 @@ module Mail
 
     def find_first_text
       return self if not multipart?
-      return text_part || html_part
+      return text_part || html_part || self
     end
 
     def convert
       if mime_type != 'text/html'
-        text = decoded
+        begin
+          text = decoded
+        rescue Exception
+          text = decode_body
+        end
       else
         IO.popen(VIM::evaluate('exists("g:notmuch_html_converter") ? ' +
                                'g:notmuch_html_converter : "elinks --dump"'), 'w+') do |pipe|
