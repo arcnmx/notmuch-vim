@@ -636,7 +636,6 @@ def show(thread_id, msg_id)
         focus_msg = nm_m
       end
     end
-    buffer.delete(buffer.count)
   end
   messages = $curbuf.messages
   messages.each_with_index do |msg, i|
